@@ -11,10 +11,11 @@ This repo includes a static frontend that Netlify can host without a build step.
 1. Push this folder to GitHub.
 2. In Netlify, choose **Add new site > Import an existing project**.
 3. Select the GitHub repo.
-4. Use these settings:
+4. If importing from the repo root, the root `netlify.toml` already points Netlify to this app. Use these settings if Netlify asks:
+   - Base directory: leave blank
    - Build command: leave blank
-   - Publish directory: `frontend/site`
-   - Functions directory: `netlify/functions`
+   - Publish directory: `lake-bloom-confidence/frontend/site`
+   - Functions directory: `lake-bloom-confidence/netlify/functions`
 5. Add one Netlify environment variable:
    - `BACKEND_URL`: your deployed FastAPI backend URL, for example `https://lake-bloom-api.example.com`
 6. Deploy.

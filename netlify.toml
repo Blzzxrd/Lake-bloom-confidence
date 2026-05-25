@@ -1,0 +1,11 @@
+[build]
+  publish = "lake-bloom-confidence/frontend/site"
+  functions = "lake-bloom-confidence/netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
