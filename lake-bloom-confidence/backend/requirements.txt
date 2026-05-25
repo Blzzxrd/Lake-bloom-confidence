@@ -1,0 +1,17 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+SQLAlchemy==2.0.36
+GeoAlchemy2==0.17.0
+psycopg[binary]==3.2.3
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+APScheduler==3.11.0
+rasterio==1.4.3
+geopandas==1.0.1
+shapely==2.0.6
+xarray==2024.11.0
+numpy==2.2.1
+pandas==2.2.3
+scikit-learn==1.6.0
+pytest==8.3.4
+httpx==0.28.1
