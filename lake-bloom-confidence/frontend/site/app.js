@@ -355,7 +355,7 @@ function shell() {
       <nav>
         <a href="#/" data-route="#/">Lake Search</a>
         <a href="#/lake/${state.selectedLakeId}" data-route="#/lake">Dashboard</a>
-        <a href="#/report" data-route="#/report">Report Bloom</a>
+        <a href="#/report" data-route="#/report">Report possible bloom</a>
         <a href="#/about" data-route="#/about">About</a>
       </nav>
       <div class="sidebar-note">
@@ -377,14 +377,29 @@ function setActiveNav() {
 
 function renderHome() {
   document.querySelector("#page").innerHTML = `
-    <section class="page-header">
+    <section class="page-header hero-panel">
       <div>
-        <p class="eyebrow">Remote-sensing screening</p>
+        <p class="eyebrow">Confidence-aware bloom assessment</p>
         <h1>Lake Bloom Confidence</h1>
-        <p class="lede">Search monitored lakes or create a screening dashboard for any U.S. lake by entering the lake name and state.</p>
+        <p class="subtitle">Confidence-aware satellite bloom assessment for lakes.</p>
+        <p class="lede">Satellite bloom maps can be uncertain because of clouds, shoreline interference, sensor limits, and missing field data. This app shows both bloom likelihood and assessment confidence.</p>
       </div>
     </section>
     ${disclaimer()}
+    <section class="feature-grid">
+      <article class="feature-card">
+        <h2>Bloom Likelihood</h2>
+        <p>Satellite-based screening estimates whether current signals resemble bloom-like conditions.</p>
+      </article>
+      <article class="feature-card confidence-feature">
+        <h2>Assessment Confidence</h2>
+        <p>Confidence-aware bloom assessment explains how reliable the estimate is before decisions are made.</p>
+      </article>
+      <article class="feature-card">
+        <h2>Official Advisory Context</h2>
+        <p>Results are framed beside official advisory links because this is screening, not official health advice.</p>
+      </article>
+    </section>
     <section class="search-panel">
       <div class="search-controls">
         <label for="lake-search">Lake name</label>
@@ -398,16 +413,16 @@ function renderHome() {
     </section>
     <section class="info-strip">
       <div>
-        <strong>Bloom likelihood</strong>
-        <span>Probability from 0 to 1 based on bloom-like remote-sensing signals.</span>
+        <strong>Uncertainty-aware monitoring</strong>
+        <span>Clouds, mixed shoreline pixels, and sensor limits can reduce reliability.</span>
       </div>
       <div>
-        <strong>Assessment confidence</strong>
-        <span>Reliability score from 0 to 1 based on data quality and model agreement.</span>
+        <strong>Field verification recommended</strong>
+        <span>Lower-confidence results should be checked against field observations and advisories.</span>
       </div>
       <div>
-        <strong>Model boundary</strong>
-        <span>Estimates support review; toxins require field or lab confirmation.</span>
+        <strong>Screening boundary</strong>
+        <span>Satellites estimate bloom-like surface signals; toxin questions require official testing.</span>
       </div>
     </section>`;
   renderLakeResults("");
@@ -479,16 +494,21 @@ async function renderDashboard() {
     api.getHistory(state.selectedLakeId),
   ]);
   const explanation = await api.explain(latest.id);
+  const factors = normalizeConfidenceFactors(explanation.confidence_factors);
+  const warnings = confidenceWarnings(latest, factors);
+  const why = whyEstimate(latest, factors);
   document.querySelector("#page").innerHTML = `
     <section class="page-header dashboard-header">
       <div>
-        <p class="eyebrow">Lake dashboard</p>
+        <p class="eyebrow">Confidence-aware dashboard</p>
         <h1>${escapeHtml(lake.name)}, ${escapeHtml(lake.state)}</h1>
+        <p class="lede">The bloom likelihood and assessment confidence should be interpreted together before using this screening result.</p>
         <p class="lede">Latest scene reviewed ${dateLabel(latest.generated_at)} · Model ${escapeHtml(latest.model_version)}</p>
       </div>
       ${badge(latest.label)}
     </section>
     ${disclaimer()}
+    ${warnings.length ? `<section class="warning-strip">${warnings.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</section>` : ""}
     <section class="dashboard-grid">
       <article class="card map-card">
         <div class="card-head">
@@ -505,36 +525,49 @@ async function renderDashboard() {
           <div><dt>Source</dt><dd>Satellite scene</dd></div>
         </dl>
       </article>
-      <article class="card stat-card">
+      <article class="card stat-card primary-metric">
         <div class="card-head">
           <h2>Bloom Likelihood</h2>
-          <span>0 to 1 probability</span>
+          <span>Satellite-based screening</span>
         </div>
         <strong class="big-stat">${pct(latest.bloom_probability)}</strong>
         <div class="bar"><span style="width:${pct(latest.bloom_probability)}"></span></div>
         ${badge(latest.label)}
       </article>
-      <article class="card stat-card">
+      <article class="card stat-card primary-metric confidence-card">
         <div class="card-head">
           <h2>Assessment Confidence</h2>
-          <span>Reliability score</span>
+          <span>Estimate reliability</span>
         </div>
         <div class="gauge" style="--value:${latest.confidence_score}">
           <span>${pct(latest.confidence_score)}</span>
         </div>
-        <p class="muted">Confidence combines observation, model, domain, time, and label quality.</p>
+        <p class="muted">Confidence is central: it describes how much trust to place in the bloom likelihood estimate.</p>
+      </article>
+      <article class="card why-card">
+        <div class="card-head">
+          <h2>Why This Estimate?</h2>
+          <span>Interpretation guide</span>
+        </div>
+        <dl class="why-list">
+          <div><dt>Recent satellite signal</dt><dd>${escapeHtml(why.signal)}</dd></div>
+          <div><dt>Possible bloom pattern</dt><dd>${escapeHtml(why.pattern)}</dd></div>
+          <div><dt>Main uncertainty reason</dt><dd>${escapeHtml(why.uncertainty)}</dd></div>
+          <div><dt>Field verification</dt><dd>${escapeHtml(why.verification)}</dd></div>
+        </dl>
+        <a class="button-link subtle-button" href="#/report">Report possible bloom</a>
       </article>
       <article class="card factors-card">
         <div class="card-head">
-          <h2>Confidence Explanation</h2>
-          <span>Factor breakdown</span>
+          <h2>Confidence Breakdown</h2>
+          <span>Reliability factors</span>
         </div>
-        ${factorList(explanation.confidence_factors)}
+        ${factorList(factors)}
       </article>
       <article class="card timeline-card">
         <div class="card-head">
           <h2>Prediction Timeline</h2>
-          <span>Bloom likelihood and confidence</span>
+          <span>Bloom likelihood and assessment confidence</span>
         </div>
         ${timeline(history)}
       </article>
@@ -551,7 +584,7 @@ async function renderDashboard() {
           <h2>Model Boundary</h2>
           <span>Screening only</span>
         </div>
-        <p>This app estimates bloom likelihood and assessment confidence; toxins require field or lab testing.</p>
+        <p>This confidence-aware bloom assessment is satellite-based screening. It does not replace official advisories, field observations, or lab testing.</p>
       </article>
     </section>`;
 }
@@ -561,8 +594,8 @@ function renderReport() {
     <section class="page-header">
       <div>
         <p class="eyebrow">Citizen observation</p>
-        <h1>Report Bloom</h1>
-        <p class="lede">Submit visual observations to support review; official advisories and lab testing remain authoritative.</p>
+        <h1>Report possible bloom</h1>
+        <p class="lede">Submit visual observations to support confidence-aware bloom assessment. Official advisories and lab testing remain authoritative.</p>
       </div>
     </section>
     ${disclaimer()}
@@ -572,6 +605,9 @@ function renderReport() {
           <select name="lake_id" required>
             ${state.lakes.map((lake) => `<option value="${lake.id}">${escapeHtml(lake.name)}, ${escapeHtml(lake.state)}</option>`).join("")}
           </select>
+        </label>
+        <label>Photo upload
+          <input name="photo_file" type="file" accept="image/*" />
         </label>
         <label>Photo URL
           <input name="photo_url" type="url" placeholder="https://example.com/photo.jpg" />
@@ -678,13 +714,50 @@ function badge(label) {
   return `<span class="badge ${tone}">${escapeHtml(label)}</span>`;
 }
 
+function normalizeConfidenceFactors(factors) {
+  return {
+    cloud_quality: factors.cloud_quality ?? factors.observation_quality ?? 0.5,
+    shoreline_interference: factors.shoreline_risk ?? factors.domain_quality ?? 0.5,
+    data_freshness: factors.data_age ?? factors.time_quality ?? 0.5,
+    sensor_model_agreement: factors.model_agreement ?? factors.model_quality ?? 0.5,
+    historical_consistency: factors.label_quality ?? 0.5,
+  };
+}
+
+function confidenceWarnings(prediction, factors) {
+  const warnings = [];
+  if (prediction.confidence_score < 0.55) warnings.push("Field verification recommended");
+  if (factors.data_freshness < 0.65) warnings.push("Recent imagery is limited");
+  if (factors.cloud_quality < 0.7) warnings.push("Cloud cover may reduce reliability");
+  if (factors.shoreline_interference < 0.75) warnings.push("Shoreline pixels may affect the estimate");
+  return warnings;
+}
+
+function whyEstimate(prediction, factors) {
+  const likely = prediction.bloom_probability >= 0.65;
+  const possible = prediction.bloom_probability >= 0.35;
+  const uncertaintyEntries = [
+    ["cloud cover", factors.cloud_quality],
+    ["shoreline interference", factors.shoreline_interference],
+    ["data freshness", factors.data_freshness],
+    ["sensor/model agreement", factors.sensor_model_agreement],
+    ["historical consistency", factors.historical_consistency],
+  ].sort((a, b) => a[1] - b[1]);
+  return {
+    signal: likely ? "Recent satellite signal is elevated." : possible ? "Recent satellite signal is mixed." : "Recent satellite signal is limited or low.",
+    pattern: likely ? "Possible bloom pattern is present." : possible ? "Some bloom-like pattern is possible." : "Bloom-like pattern is not prominent in the screening estimate.",
+    uncertainty: `${uncertaintyEntries[0][0]} is the main confidence limiter.`,
+    verification: prediction.confidence_score < 0.65 ? "Field verification recommended." : "Continue checking official advisories and local observations.",
+  };
+}
+
 function factorList(factors) {
   const rows = [
     ["Cloud quality", factors.cloud_quality, "Clearer observations increase reliability."],
-    ["Shoreline risk", factors.shoreline_risk, "Lower mixed-pixel risk improves confidence."],
-    ["Model agreement", factors.model_agreement, "Agreement across estimates improves confidence."],
-    ["Data age", factors.data_age, "Recent clear observations carry more weight."],
-    ["Label quality", factors.label_quality, "Reviewed support labels improve trust."],
+    ["Shoreline interference", factors.shoreline_interference, "Lower mixed-pixel interference improves confidence."],
+    ["Data freshness", factors.data_freshness, "Recent clear observations carry more weight."],
+    ["Sensor/model agreement", factors.sensor_model_agreement, "Agreement across signals improves confidence."],
+    ["Historical consistency", factors.historical_consistency, "Consistency with reviewed patterns improves trust."],
   ];
   return rows.map(([name, value, text]) => `
     <div class="factor-row">

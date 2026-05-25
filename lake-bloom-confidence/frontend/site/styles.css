@@ -179,6 +179,42 @@ h2 {
   font-size: 16px;
 }
 
+.subtitle {
+  margin: 10px 0 0;
+  color: var(--primary-dark);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.hero-panel {
+  padding-bottom: 4px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 18px 0;
+}
+
+.feature-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.feature-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.confidence-feature {
+  border-color: #9bd0df;
+  background: #f0f9ff;
+}
+
 .notice {
   display: grid;
   gap: 3px;
@@ -385,8 +421,39 @@ textarea:focus {
   margin-top: 18px;
 }
 
+.warning-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.warning-strip span {
+  padding: 7px 10px;
+  border: 1px solid #f2d18a;
+  border-radius: 8px;
+  background: var(--amber-bg);
+  color: #7c3f00;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .card {
   padding: 16px;
+}
+
+.primary-metric {
+  order: -3;
+}
+
+.confidence-card {
+  border-color: #9bd0df;
+  background: #f8fdff;
+}
+
+.why-card {
+  order: -2;
+  grid-column: span 1;
 }
 
 .card-head {
@@ -516,6 +583,27 @@ dd {
 .advisory-card,
 .model-card {
   grid-column: span 1;
+}
+
+.why-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.why-list div {
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.why-list dd {
+  color: #475569;
+  font-weight: 600;
+}
+
+.subtle-button {
+  background: #0e7490;
 }
 
 .factor-row {
@@ -772,7 +860,8 @@ dd {
   .dashboard-grid,
   .form-layout,
   .about-grid,
-  .info-strip {
+  .info-strip,
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 
