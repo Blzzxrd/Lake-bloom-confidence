@@ -1,4 +1,4 @@
-from app.services.advisory import ALLOWED_LABELS
+from app.services.advisory import ALLOWED_LABELS, official_advisory_for_state
 from app.services.confidence import compute_confidence
 
 
@@ -35,6 +35,12 @@ def test_lake_search_filters_modeled_lakes(client):
     response = client.get("/lakes/search?q=Champlain&state=NY")
     assert response.status_code == 200
     assert any(lake["name"] == "Lake Champlain" for lake in response.json())
+
+
+def test_ohio_advisory_uses_current_state_resource():
+    advisory = official_advisory_for_state("OH")
+    assert advisory["label"] == "Ohio HAB advisories and monitoring"
+    assert advisory["url"] == "https://www.ohioalgaeinfo.com/"
 
 
 def test_confidence_score_bounds():

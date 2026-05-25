@@ -261,8 +261,8 @@ Response:
   ],
   "screening_notice": "Satellite estimates do not replace official advisories or lab testing. This service estimates bloom likelihood and assessment confidence only; it does not detect toxins.",
   "advisory": {
-    "label": "OH official water quality advisories",
-    "url": "https://www.epa.gov/cyanohabs/state-resources-addressing-cyanobacterial-harmful-algal-blooms"
+    "label": "Ohio HAB advisories and monitoring",
+    "url": "https://www.ohioalgaeinfo.com/"
   }
 }
 ```

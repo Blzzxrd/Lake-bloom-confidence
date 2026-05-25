@@ -10,6 +10,13 @@ const labels = [
   "Not enough reliable information",
 ];
 
+const advisoryLinks = {
+  OH: {
+    label: "Ohio HAB advisories and monitoring",
+    url: "https://www.ohioalgaeinfo.com/",
+  },
+};
+
 const usStates = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
   "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
@@ -160,16 +167,17 @@ const api = {
   getHistory: (id) => request(`/lakes/${id}/history`, makeHistory(Number(id))),
   explain: (id) => {
     const prediction = Object.values(demoPredictions).find((item) => item.id === Number(id)) || demoPredictions[1];
-    const lake = demoLakes.find((item) => item.id === prediction.lake_id) || demoLakes[0];
+    const lake = state.lakes.find((item) => item.id === prediction.lake_id) || demoLakes.find((item) => item.id === prediction.lake_id) || demoLakes[0];
+    const advisory = advisoryLinks[lake.state] || {
+      label: `${lake.state} official water quality advisories`,
+      url: "https://www.epa.gov/habs/hab-advisories",
+    };
     return request(`/predictions/${id}/explain`, {
       ...prediction,
       confidence_factors: factorsOnly(prediction),
       explanation: factorExplanation(factorsOnly(prediction)),
       screening_notice: "Satellite estimates do not replace official advisories or lab testing. This service estimates bloom likelihood and assessment confidence only; it does not detect toxins.",
-      advisory: {
-        label: `${lake.state} official water quality advisories`,
-        url: "https://www.epa.gov/cyanohabs/state-resources-addressing-cyanobacterial-harmful-algal-blooms",
-      },
+      advisory,
     });
   },
   submitReport: async (payload) => {

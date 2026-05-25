@@ -11,6 +11,13 @@ ALLOWED_LABELS = {
     "Not enough reliable information",
 }
 
+STATE_ADVISORY_LINKS = {
+    "OH": {
+        "label": "Ohio HAB advisories and monitoring",
+        "url": "https://www.ohioalgaeinfo.com/",
+    },
+}
+
 
 def label_for_prediction(bloom_probability: float, confidence_score: float) -> str:
     if confidence_score < 0.25:
@@ -27,7 +34,10 @@ def label_for_prediction(bloom_probability: float, confidence_score: float) -> s
 
 
 def official_advisory_for_state(state: str) -> dict[str, str]:
+    state_code = state.strip().upper()
+    if state_code in STATE_ADVISORY_LINKS:
+        return STATE_ADVISORY_LINKS[state_code]
     return {
-        "label": f"{state} official water quality advisories",
-        "url": f"https://www.epa.gov/cyanohabs/state-resources-addressing-cyanobacterial-harmful-algal-blooms",
+        "label": f"{state_code} official water quality advisories",
+        "url": "https://www.epa.gov/habs/hab-advisories",
     }
