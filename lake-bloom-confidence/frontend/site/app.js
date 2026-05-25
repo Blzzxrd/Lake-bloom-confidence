@@ -142,27 +142,20 @@ const api = {
   listLakes: () => request("/lakes", demoLakes),
   createLake: async (payload) => {
     if (!API_BASE_URL) {
-      const id = Math.max(...state.lakes.map((lake) => lake.id), 5) + 1;
-      const lake = {
-        id,
-        name: payload.name,
-        state: payload.state,
-        geometry: "POLYGON((-98.7 39.7,-98.5 39.7,-98.5 39.9,-98.7 39.9,-98.7 39.7))",
-        area_km2: 42.5,
-        shoreline_length_km: 18.4,
-      };
-      demoPredictions[id] = makePrediction(id, id, 0.46, 0.52, labels[2], 0.76, 0.72, 0.79, 0.82, 0.78);
-      return lake;
+      return createLocalModeledLake(payload);
     }
     const response = await fetch(apiUrl("/lakes"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) {
+      console.warn("Backend lake creation unavailable; using local modeled dashboard.", await response.text());
+      return createLocalModeledLake(payload);
+    }
     return response.json();
   },
-  getLake: (id) => request(`/lakes/${id}`, demoLakes.find((lake) => lake.id === Number(id)) || demoLakes[0]),
+  getLake: (id) => request(`/lakes/${id}`, state.lakes.find((lake) => lake.id === Number(id)) || demoLakes.find((lake) => lake.id === Number(id)) || demoLakes[0]),
   getLatest: (id) => request(`/lakes/${id}/latest`, demoPredictions[id] || demoPredictions[1]),
   getHistory: (id) => request(`/lakes/${id}/history`, makeHistory(Number(id))),
   explain: (id) => {
@@ -198,6 +191,20 @@ const api = {
     return response.json();
   },
 };
+
+function createLocalModeledLake(payload) {
+  const id = Math.max(...state.lakes.map((lake) => lake.id), ...demoLakes.map((lake) => lake.id), 5) + 1;
+  const lake = {
+    id,
+    name: payload.name,
+    state: payload.state,
+    geometry: "POLYGON((-98.7 39.7,-98.5 39.7,-98.5 39.9,-98.7 39.9,-98.7 39.7))",
+    area_km2: 42.5,
+    shoreline_length_km: 18.4,
+  };
+  demoPredictions[id] = makePrediction(id, id, 0.46, 0.52, labels[2], 0.76, 0.72, 0.79, 0.82, 0.78);
+  return lake;
+}
 
 function factorsOnly(prediction) {
   const { features, ...factors } = prediction.confidence_factors_json;
