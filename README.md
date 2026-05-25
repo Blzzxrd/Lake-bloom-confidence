@@ -25,6 +25,16 @@ The frontend calls `/.netlify/functions/api`, and that Netlify Function forwards
 
 If `BACKEND_URL` is not set, the site still opens with demo data, but live backend calls will not work.
 
+## Any U.S. Lake Workflow
+
+The site is no longer limited to the five seeded demo lakes. Users can enter a lake name and U.S. state on the home screen. If the lake is not already in the backend, the frontend calls:
+
+```text
+POST /lakes
+```
+
+The backend creates a modeled lake record, generates a mock satellite scene, and returns a screening dashboard. This remains a decision-support estimate only; authoritative lake boundaries and real satellite ingestion can be connected later.
+
 ## Deploy The Backend On Render
 
 This repo includes a root `render.yaml` Blueprint for the FastAPI backend.

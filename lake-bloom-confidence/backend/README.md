@@ -51,6 +51,8 @@ Tests use in-memory SQLite for speed. Docker uses PostgreSQL/PostGIS.
 Frontend API calls:
 
 - `GET /lakes`
+- `GET /lakes/search?q={query}&state={state}`
+- `POST /lakes`
 - `GET /lakes/{lake_id}`
 - `GET /lakes/{lake_id}/latest`
 - `GET /lakes/{lake_id}/history`
@@ -108,6 +110,47 @@ Satellite estimates do not replace official advisories or lab testing.
   "geometry": "POLYGON((-83.5 41.3,-82.5 41.3,-82.5 42.0,-83.5 42.0,-83.5 41.3))",
   "area_km2": 3200.0,
   "shoreline_length_km": 510.0
+}
+```
+
+### `GET /lakes/search?q=Champlain&state=NY`
+
+```json
+[
+  {
+    "id": 6,
+    "name": "Lake Champlain",
+    "state": "NY",
+    "geometry": "POLYGON((-75.50000 43.00000,-75.42000 43.00000,-75.42000 43.07000,-75.50000 43.07000,-75.50000 43.00000))",
+    "area_km2": 125.0,
+    "shoreline_length_km": 84.0
+  }
+]
+```
+
+### `POST /lakes`
+
+Creates or returns a modeled lake record for a U.S. lake not already in the demo database, then generates a mock satellite scene and prediction.
+
+Request:
+
+```json
+{
+  "name": "Lake Minnetonka",
+  "state": "MN"
+}
+```
+
+Response:
+
+```json
+{
+  "id": 6,
+  "name": "Lake Minnetonka",
+  "state": "MN",
+  "geometry": "POLYGON((-94.30000 46.30000,-94.22000 46.30000,-94.22000 46.37000,-94.30000 46.37000,-94.30000 46.30000))",
+  "area_km2": 42.5,
+  "shoreline_length_km": 18.4
 }
 ```
 

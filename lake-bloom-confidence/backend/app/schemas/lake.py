@@ -1,4 +1,9 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class LakeCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    state: str = Field(min_length=2, max_length=2)
 
 
 class LakeRead(BaseModel):

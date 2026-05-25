@@ -16,6 +16,27 @@ def test_lake_list(client):
     assert {"id", "name", "state", "geometry", "area_km2", "shoreline_length_km"} <= set(lakes[0])
 
 
+def test_create_modeled_lake_for_any_us_lake(client):
+    response = client.post("/lakes", json={"name": "Lake Minnetonka", "state": "MN"})
+    assert response.status_code == 201
+    lake = response.json()
+    assert lake["name"] == "Lake Minnetonka"
+    assert lake["state"] == "MN"
+
+    latest = client.get(f"/lakes/{lake['id']}/latest")
+    assert latest.status_code == 200
+    payload = latest.json()
+    assert 0 <= payload["bloom_probability"] <= 1
+    assert 0 <= payload["confidence_score"] <= 1
+
+
+def test_lake_search_filters_modeled_lakes(client):
+    client.post("/lakes", json={"name": "Lake Champlain", "state": "NY"})
+    response = client.get("/lakes/search?q=Champlain&state=NY")
+    assert response.status_code == 200
+    assert any(lake["name"] == "Lake Champlain" for lake in response.json())
+
+
 def test_confidence_score_bounds():
     result = compute_confidence(
         cloud_pct=33,

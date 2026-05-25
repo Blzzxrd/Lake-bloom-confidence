@@ -10,6 +10,14 @@ const labels = [
   "Not enough reliable information",
 ];
 
+const usStates = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
+];
+
 const demoLakes = [
   {
     id: 1,
@@ -125,6 +133,28 @@ function clone(value) {
 
 const api = {
   listLakes: () => request("/lakes", demoLakes),
+  createLake: async (payload) => {
+    if (!API_BASE_URL) {
+      const id = Math.max(...state.lakes.map((lake) => lake.id), 5) + 1;
+      const lake = {
+        id,
+        name: payload.name,
+        state: payload.state,
+        geometry: "POLYGON((-98.7 39.7,-98.5 39.7,-98.5 39.9,-98.7 39.9,-98.7 39.7))",
+        area_km2: 42.5,
+        shoreline_length_km: 18.4,
+      };
+      demoPredictions[id] = makePrediction(id, id, 0.46, 0.52, labels[2], 0.76, 0.72, 0.79, 0.82, 0.78);
+      return lake;
+    }
+    const response = await fetch(apiUrl("/lakes"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  },
   getLake: (id) => request(`/lakes/${id}`, demoLakes.find((lake) => lake.id === Number(id)) || demoLakes[0]),
   getLatest: (id) => request(`/lakes/${id}/latest`, demoPredictions[id] || demoPredictions[1]),
   getHistory: (id) => request(`/lakes/${id}/history`, makeHistory(Number(id))),
@@ -204,6 +234,7 @@ function clamp(value) {
 const state = {
   lakes: [],
   selectedLakeId: 1,
+  selectedSearchState: "MN",
   route: location.hash || "#/",
 };
 
@@ -254,7 +285,20 @@ document.addEventListener("input", (event) => {
   }
 });
 
+document.addEventListener("change", (event) => {
+  if (event.target.matches("#lake-state")) {
+    state.selectedSearchState = event.target.value;
+    renderLakeResults(document.querySelector("#lake-search")?.value || "");
+  }
+});
+
 document.addEventListener("click", (event) => {
+  const createTarget = event.target.closest("[data-create-lake]");
+  if (createTarget) {
+    createModeledLake();
+    return;
+  }
+
   const target = event.target.closest("[data-lake-id]");
   if (target) {
     state.selectedLakeId = Number(target.dataset.lakeId);
@@ -322,13 +366,19 @@ function renderHome() {
       <div>
         <p class="eyebrow">Remote-sensing screening</p>
         <h1>Lake Bloom Confidence</h1>
-        <p class="lede">Search monitored lakes, review bloom likelihood, and compare the assessment confidence behind each estimate.</p>
+        <p class="lede">Search monitored lakes or create a screening dashboard for any U.S. lake by entering the lake name and state.</p>
       </div>
     </section>
     ${disclaimer()}
     <section class="search-panel">
-      <label for="lake-search">Search lakes</label>
-      <input id="lake-search" type="search" placeholder="Search by lake name or state" autocomplete="off" />
+      <div class="search-controls">
+        <label for="lake-search">Lake name</label>
+        <input id="lake-search" type="search" placeholder="Search or enter any U.S. lake" autocomplete="off" />
+        <label for="lake-state">State</label>
+        <select id="lake-state">
+          ${usStates.map((code) => `<option value="${code}" ${code === state.selectedSearchState ? "selected" : ""}>${code}</option>`).join("")}
+        </select>
+      </div>
       <div id="lake-results" class="lake-results"></div>
     </section>
     <section class="info-strip">
@@ -350,8 +400,12 @@ function renderHome() {
 
 function renderLakeResults(query) {
   const needle = query.trim().toLowerCase();
-  const lakes = state.lakes.filter((lake) => `${lake.name} ${lake.state}`.toLowerCase().includes(needle));
-  document.querySelector("#lake-results").innerHTML = lakes.map((lake) => {
+  const lakes = state.lakes.filter((lake) => {
+    const nameMatch = `${lake.name} ${lake.state}`.toLowerCase().includes(needle);
+    const stateMatch = !state.selectedSearchState || lake.state === state.selectedSearchState;
+    return nameMatch && stateMatch;
+  });
+  const rows = lakes.map((lake) => {
     const prediction = demoPredictions[lake.id] || demoPredictions[1];
     return `
       <button class="lake-row" data-lake-id="${lake.id}">
@@ -364,7 +418,43 @@ function renderLakeResults(query) {
           <span class="metric-mini">${pct(prediction.confidence_score)} confidence</span>
         </span>
       </button>`;
-  }).join("") || `<div class="empty">No lakes match that search.</div>`;
+  }).join("");
+  const createPanel = needle.length >= 2 ? `
+    <div class="create-lake-panel">
+      <div>
+        <strong>Create a screening dashboard for “${escapeHtml(query.trim())}” in ${escapeHtml(state.selectedSearchState)}</strong>
+        <span>Uses modeled lake geometry and mock satellite ingestion until authoritative lake boundary data is connected.</span>
+      </div>
+      <button class="secondary-button" data-create-lake type="button">Create dashboard</button>
+    </div>` : "";
+  document.querySelector("#lake-results").innerHTML = rows || createPanel || `<div class="empty">Start typing a lake name to search or create a dashboard.</div>`;
+}
+
+async function createModeledLake() {
+  const input = document.querySelector("#lake-search");
+  const name = input.value.trim();
+  if (name.length < 2) {
+    input.focus();
+    return;
+  }
+  const button = document.querySelector("[data-create-lake]");
+  button.disabled = true;
+  button.textContent = "Creating...";
+  try {
+    const lake = await api.createLake({ name, state: state.selectedSearchState });
+    if (!state.lakes.some((item) => item.id === lake.id)) {
+      state.lakes.push(lake);
+      state.lakes.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    state.selectedLakeId = lake.id;
+    location.hash = `#/lake/${lake.id}`;
+  } catch (error) {
+    document.querySelector("#lake-results").innerHTML = `
+      <div class="notice error">
+        <strong>Could not create that lake dashboard.</strong>
+        <span>${escapeHtml(error.message)}</span>
+      </div>`;
+  }
 }
 
 async function renderDashboard() {

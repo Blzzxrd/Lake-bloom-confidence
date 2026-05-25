@@ -28,6 +28,16 @@ The deployed site uses a Netlify Function proxy at:
 
 That proxy reads `BACKEND_URL` and forwards frontend calls to the deployed FastAPI backend. This avoids browser CORS surprises and keeps the backend URL configurable from Netlify.
 
+## Any U.S. Lake Workflow
+
+The frontend can create a screening dashboard for any U.S. lake name and state. For lakes outside the seed data, it calls:
+
+```text
+POST /lakes
+```
+
+The backend stores a modeled lake record, creates a mock satellite scene, and generates a bloom-likelihood and confidence estimate. This does not imply toxin detection or official lake-boundary validation.
+
 The site works with demo data if no backend is configured. To test against a local backend outside Netlify, edit:
 
 ```text

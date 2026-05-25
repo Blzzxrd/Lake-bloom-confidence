@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.lake import Lake
 from app.models.prediction import Prediction
-from app.schemas.lake import LakeRead
+from app.schemas.lake import LakeCreate, LakeRead
 from app.schemas.prediction import PredictionRead
+from app.services.lake_discovery import find_lakes, get_or_create_modeled_lake
 
 router = APIRouter(prefix="/lakes", tags=["lakes"])
 
@@ -13,6 +14,26 @@ router = APIRouter(prefix="/lakes", tags=["lakes"])
 @router.get("", response_model=list[LakeRead])
 def list_lakes(db: Session = Depends(get_db)) -> list[Lake]:
     return db.query(Lake).order_by(Lake.name).all()
+
+
+@router.get("/search", response_model=list[LakeRead])
+def search_lakes(
+    q: str = Query("", max_length=160),
+    state: str | None = Query(None, min_length=2, max_length=2),
+    db: Session = Depends(get_db),
+) -> list[Lake]:
+    try:
+        return find_lakes(db, query=q, state=state)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("", response_model=LakeRead, status_code=status.HTTP_201_CREATED)
+def create_modeled_lake(payload: LakeCreate, db: Session = Depends(get_db)) -> Lake:
+    try:
+        return get_or_create_modeled_lake(db, name=payload.name, state=payload.state)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/{lake_id}", response_model=LakeRead)
