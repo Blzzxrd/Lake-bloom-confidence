@@ -44,7 +44,9 @@ For Netlify production, leave `frontend/site/config.js` blank and use the `BACKE
 
 ## Backend Deployment Notes
 
-The backend must be deployed separately on a service that can run FastAPI, PostgreSQL, and PostGIS, such as Render, Railway, Fly.io, or a VPS. After it is deployed, use its public HTTPS URL as Netlify's `BACKEND_URL`.
+The backend must be deployed separately. This repo includes a root `render.yaml` Blueprint for Render that deploys the backend as a Docker service from `lake-bloom-confidence/backend`.
+
+After it is deployed, use its public HTTPS URL as Netlify's `BACKEND_URL`.
 
 Example:
 

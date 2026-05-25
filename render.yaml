@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lake-bloom-confidence-api
+    runtime: docker
+    plan: free
+    dockerContext: lake-bloom-confidence/backend
+    dockerfilePath: lake-bloom-confidence/backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: LBC_DATABASE_URL
+        value: sqlite+pysqlite:///./render_demo.db
+      - key: LBC_SEED_DEMO_DATA
+        value: "true"
+      - key: LBC_SCHEDULER_ENABLED
+        value: "false"
