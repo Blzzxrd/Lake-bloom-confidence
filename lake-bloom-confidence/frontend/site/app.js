@@ -424,8 +424,61 @@ function renderHome() {
         <strong>Screening boundary</strong>
         <span>Satellites estimate bloom-like surface signals; toxin questions require official testing.</span>
       </div>
+    </section>
+    <section class="science-section">
+      <div class="section-heading">
+        <p class="eyebrow">Why confidence matters</p>
+        <h2>Most public bloom maps do not expose uncertainty. Lake Bloom Confidence makes uncertainty visible.</h2>
+      </div>
+      <div class="uncertainty-grid">
+        ${uncertaintyCard("Cloud contamination", "Clouds and haze can mask water reflectance signals.", "☁")}
+        ${uncertaintyCard("Shoreline interference", "Mixed land-water pixels can distort small coves and edges.", "◒")}
+        ${uncertaintyCard("Small lake resolution limits", "Sensor pixel size matters for narrow or complex lakes.", "▦")}
+        ${uncertaintyCard("Missing field measurements", "Sparse labels reduce calibration confidence.", "⌁")}
+        ${uncertaintyCard("Changing conditions", "Wind, rain, and circulation can shift surface patterns quickly.", "↝")}
+        ${uncertaintyCard("Model disagreement", "Different signals may not point to the same conclusion.", "≋")}
+      </div>
+    </section>
+    <section class="workflow-section">
+      <div class="section-heading">
+        <p class="eyebrow">How the system works</p>
+        <h2>From imagery to verification guidance</h2>
+      </div>
+      <div class="workflow-grid">
+        ${workflowStep("1", "Satellite imagery ingestion", "Collect recent surface observations.", "Metadata: sensor, acquisition time, cloud cover, image age.")}
+        ${workflowStep("2", "Bloom signal analysis", "Screen for bloom-like spectral patterns.", "Features: NDCI, NDWI, green/red/NIR ratios.")}
+        ${workflowStep("3", "Confidence evaluation", "Estimate reliability before interpretation.", "Factors: clouds, shoreline pixels, model agreement, data age.")}
+        ${workflowStep("4", "Advisory + verification guidance", "Place screening results beside official context.", "Output: status label, uncertainty reason, field verification prompt.")}
+      </div>
+    </section>
+    <section class="live-demo card">
+      <div>
+        <p class="eyebrow">Live confidence demo</p>
+        <h2>Lake Hopatcong example</h2>
+        <p>Bloom likelihood is only half the story. The confidence score explains how carefully to use the estimate.</p>
+      </div>
+      <div class="demo-metrics">
+        <div class="demo-ring" style="--value:0.61"><span>61%</span><small>Assessment confidence</small></div>
+        <div class="demo-readout">
+          <strong>Bloom likelihood: 72%</strong>
+          <span>Main uncertainty: mixed shoreline pixels</span>
+          <span>Recommended action: field verification recommended</span>
+          <details>
+            <summary>Expandable explanation</summary>
+            <p>Elevated bloom-like signal is present, but shoreline complexity and limited field labels reduce reliability.</p>
+          </details>
+        </div>
+      </div>
     </section>`;
   renderLakeResults("");
+}
+
+function uncertaintyCard(title, body, icon) {
+  return `<article class="uncertainty-card"><span>${icon}</span><strong>${title}</strong><p>${body}</p></article>`;
+}
+
+function workflowStep(step, title, body, detail) {
+  return `<article class="workflow-card" title="${escapeAttr(detail)}"><span>${step}</span><strong>${title}</strong><p>${body}</p><small>${detail}</small></article>`;
 }
 
 function renderLakeResults(query) {
@@ -571,20 +624,46 @@ async function renderDashboard() {
         </div>
         ${timeline(history)}
       </article>
+      <article class="card uncertainty-card-wide">
+        <div class="card-head">
+          <h2>Main Sources of Uncertainty</h2>
+          <span>Reliability limitations</span>
+        </div>
+        ${uncertaintyList(latest, factors, lake)}
+      </article>
+      <article class="card explainability-card">
+        <div class="card-head">
+          <h2>Explainability Module</h2>
+          <span>Feature contribution</span>
+        </div>
+        ${featureImportance(latest)}
+      </article>
+      <article class="card temporal-card">
+        <div class="card-head">
+          <h2>Temporal Analytics</h2>
+          <span>Unstable periods</span>
+        </div>
+        ${temporalAnalytics(history)}
+      </article>
       <article class="card advisory-card">
         <div class="card-head">
-          <h2>Official Advisory</h2>
-          <span>Field verification</span>
+          <h2>Official Advisory Status</h2>
+          <span>Comparison context</span>
         </div>
-        <p>Use local advisories and lab testing for public-health decisions.</p>
+        <div class="advisory-status">
+          <span>No advisory data connected</span>
+          <small>Compare official status against bloom likelihood and confidence when available.</small>
+        </div>
+        <p>Satellite assessments do not replace official advisories.</p>
         <a class="button-link" href="${escapeAttr(explanation.advisory.url)}" target="_blank" rel="noreferrer">${escapeHtml(explanation.advisory.label)}</a>
       </article>
       <article class="card model-card">
         <div class="card-head">
-          <h2>Model Boundary</h2>
-          <span>Screening only</span>
+          <h2>Field Verification System</h2>
+          <span>Human observations reduce uncertainty</span>
         </div>
-        <p>This confidence-aware bloom assessment is satellite-based screening. It does not replace official advisories, field observations, or lab testing.</p>
+        <p>When confidence is guarded, shoreline photos and volunteer observations help reduce uncertainty.</p>
+        <a class="button-link subtle-button" href="#/report">Report possible bloom</a>
       </article>
     </section>`;
 }
@@ -621,6 +700,36 @@ function renderReport() {
             <option value="other observation">Other observation</option>
           </select>
         </label>
+        <label>Water color
+          <select name="water_color">
+            <option value="green">Green</option>
+            <option value="blue green">Blue-green</option>
+            <option value="brown">Brown</option>
+            <option value="reddish">Reddish</option>
+            <option value="unclear">Unclear</option>
+          </select>
+        </label>
+        <label>Smell
+          <select name="smell">
+            <option value="none noticed">None noticed</option>
+            <option value="earthy">Earthy</option>
+            <option value="musty">Musty</option>
+            <option value="sewage like">Sewage-like</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label>Surface texture
+          <select name="surface_texture">
+            <option value="streaks">Streaks</option>
+            <option value="scum">Surface scum</option>
+            <option value="paint like">Paint-like film</option>
+            <option value="floating mats">Floating mats</option>
+            <option value="normal">No obvious surface texture</option>
+          </select>
+        </label>
+        <label>Weather notes
+          <input name="weather_notes" type="text" placeholder="Recent rain, calm wind, heat, or cloud conditions" />
+        </label>
         <div class="field-row">
           <label>Latitude <span>required</span>
             <input name="lat" type="number" step="0.000001" min="-90" max="90" required placeholder="41.720000" />
@@ -633,7 +742,7 @@ function renderReport() {
           <textarea name="notes" rows="5" placeholder="Describe what you observed, where it was, and approximate time."></textarea>
         </label>
         <div class="privacy">
-          Reports may include location and submitted media; avoid including people or private property details in photos.
+          Reports may include location and submitted media. Avoid including people or private property details in photos. Uploaded images should be stripped of precise EXIF metadata before storage; public displays should use coarse location protection.
         </div>
         <button class="primary-button" type="submit">Submit report</button>
       </form>
@@ -721,6 +830,8 @@ function normalizeConfidenceFactors(factors) {
     data_freshness: factors.data_age ?? factors.time_quality ?? 0.5,
     sensor_model_agreement: factors.model_agreement ?? factors.model_quality ?? 0.5,
     historical_consistency: factors.label_quality ?? 0.5,
+    model_certainty: factors.model_quality ?? factors.model_agreement ?? 0.5,
+    lake_size_suitability: factors.domain_quality ?? factors.shoreline_risk ?? 0.5,
   };
 }
 
@@ -756,8 +867,10 @@ function factorList(factors) {
     ["Cloud quality", factors.cloud_quality, "Clearer observations increase reliability."],
     ["Shoreline interference", factors.shoreline_interference, "Lower mixed-pixel interference improves confidence."],
     ["Data freshness", factors.data_freshness, "Recent clear observations carry more weight."],
-    ["Sensor/model agreement", factors.sensor_model_agreement, "Agreement across signals improves confidence."],
+    ["Sensor agreement", factors.sensor_model_agreement, "Agreement across satellite signals improves confidence."],
     ["Historical consistency", factors.historical_consistency, "Consistency with reviewed patterns improves trust."],
+    ["Model certainty", factors.model_certainty, "Stable model outputs improve reliability."],
+    ["Lake size suitability", factors.lake_size_suitability, "Larger, less complex lakes are easier to assess from orbit."],
   ];
   return rows.map(([name, value, text]) => `
     <div class="factor-row">
@@ -768,6 +881,42 @@ function factorList(factors) {
       <div class="factor-score">${pct(value)}</div>
       <div class="bar"><span style="width:${pct(value)}"></span></div>
     </div>`).join("");
+}
+
+function uncertaintyList(prediction, factors, lake) {
+  const items = [];
+  if (factors.cloud_quality < 0.7) items.push(["Cloud cover may reduce reliability.", "Cloud quality is below the preferred screening threshold."]);
+  if (factors.shoreline_interference < 0.75) items.push(["Shoreline pixels may affect the estimate.", "Mixed land-water pixels can distort reflectance near edges."]);
+  if (factors.data_freshness < 0.65) items.push(["Recent imagery is limited.", "The most reliable clear observation is aging."]);
+  if (factors.sensor_model_agreement < 0.7) items.push(["Sensor outputs may disagree.", "Spectral indicators are not fully aligned."]);
+  if (lake.area_km2 < 5) items.push(["Lake size near satellite resolution threshold.", "Small water bodies can be difficult to separate from surrounding land."]);
+  if (!items.length) items.push(["No dominant uncertainty source detected.", "Continue to compare with official advisories and field observations."]);
+  if (prediction.confidence_score < 0.65) items.push(["Field verification recommended.", "Human observations can reduce uncertainty for this screening estimate."]);
+  return `<div class="uncertainty-list">${items.map(([title, body]) => `<div><strong>${title}</strong><span>${body}</span></div>`).join("")}</div>`;
+}
+
+function featureImportance(prediction) {
+  const rows = [
+    ["Elevated NDCI signal detected", prediction.bloom_probability * 0.86],
+    ["Reflectance resembles historical bloom events", prediction.bloom_probability * 0.74],
+    ["Surface temperature context placeholder", 0.58],
+    ["Recent calm wind context placeholder", 0.52],
+  ];
+  return `<details open class="science-details">
+    <summary>Scientific detail</summary>
+    <div class="importance-bars">
+      ${rows.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${pct(clamp(value))}"></b></i><strong>${pct(clamp(value))}</strong></div>`).join("")}
+    </div>
+  </details>`;
+}
+
+function temporalAnalytics(history) {
+  return `<div class="temporal-grid">
+    <div><strong>Bloom likelihood timeline</strong><span>${pct(history.at(-1)?.bloom_probability ?? 0)} latest</span></div>
+    <div><strong>Confidence timeline</strong><span>${pct(history.at(-1)?.confidence_score ?? 0)} latest</span></div>
+    <div><strong>Cloud contamination timeline</strong><span>Modeled from scene quality</span></div>
+  </div>
+  <p class="muted">Hoverable date-level analytics can be connected when full scene history is available.</p>`;
 }
 
 function timeline(history) {

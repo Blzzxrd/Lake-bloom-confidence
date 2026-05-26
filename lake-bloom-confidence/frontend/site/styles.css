@@ -1,5 +1,5 @@
 :root {
-  --bg: #f8fafc;
+  --bg: #edf5f8;
   --surface: #ffffff;
   --surface-2: #eef7fb;
   --text: #0f172a;
@@ -14,7 +14,8 @@
   --red: #b91c1c;
   --red-bg: #fee2e2;
   --blue-bg: #e0f2fe;
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow: 0 14px 38px rgba(15, 23, 42, 0.08);
+  --glass: rgba(255, 255, 255, 0.78);
 }
 
 * {
@@ -23,7 +24,9 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(14, 116, 144, 0.16), transparent 36rem),
+    linear-gradient(180deg, #f7fbfd 0%, var(--bg) 100%);
   color: var(--text);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
@@ -52,7 +55,8 @@ textarea {
   height: 100vh;
   padding: 24px 16px;
   border-right: 1px solid var(--line);
-  background: #f0f7fb;
+  background: rgba(240, 247, 251, 0.86);
+  backdrop-filter: blur(16px);
 }
 
 .brand {
@@ -187,7 +191,13 @@ h2 {
 }
 
 .hero-panel {
-  padding-bottom: 4px;
+  padding: 22px;
+  border: 1px solid rgba(14, 116, 144, 0.15);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(224, 242, 254, 0.58)),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.08), transparent);
+  box-shadow: var(--shadow);
 }
 
 .feature-grid {
@@ -201,8 +211,123 @@ h2 {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--glass);
+  backdrop-filter: blur(10px);
   box-shadow: var(--shadow);
+}
+
+.science-section,
+.workflow-section,
+.live-demo {
+  margin-top: 18px;
+}
+
+.section-heading {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.section-heading h2 {
+  max-width: 940px;
+  font-size: clamp(22px, 3vw, 32px);
+}
+
+.uncertainty-grid,
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.uncertainty-card,
+.workflow-card {
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.uncertainty-card > span,
+.workflow-card > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #dff3f7;
+  color: var(--primary-dark);
+  font-weight: 900;
+}
+
+.uncertainty-card p,
+.workflow-card p,
+.workflow-card small {
+  color: var(--muted);
+}
+
+.workflow-card small {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.live-demo {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 20px;
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.82), rgba(240,249,255,0.72)),
+    radial-gradient(circle at bottom right, rgba(4, 120, 87, 0.14), transparent 20rem);
+}
+
+.demo-metrics {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.demo-ring {
+  --degrees: calc(var(--value) * 360deg);
+  display: grid;
+  place-items: center;
+  width: 160px;
+  height: 160px;
+  border-radius: 999px;
+  background: conic-gradient(var(--primary) var(--degrees), #dbeafe 0);
+}
+
+.demo-ring span,
+.demo-ring small {
+  grid-area: 1 / 1;
+}
+
+.demo-ring span {
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.demo-ring small {
+  align-self: end;
+  max-width: 100px;
+  margin-bottom: 28px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.demo-readout {
+  display: grid;
+  gap: 8px;
+}
+
+.demo-readout span,
+.demo-readout p {
+  color: var(--muted);
 }
 
 .feature-card p {
@@ -416,7 +541,7 @@ textarea:focus {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1.4fr 0.8fr 0.8fr;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
   margin-top: 18px;
 }
@@ -443,7 +568,7 @@ textarea:focus {
 }
 
 .primary-metric {
-  order: -3;
+  grid-column: span 3;
 }
 
 .confidence-card {
@@ -452,8 +577,7 @@ textarea:focus {
 }
 
 .why-card {
-  order: -2;
-  grid-column: span 1;
+  grid-column: span 3;
 }
 
 .card-head {
@@ -473,6 +597,7 @@ textarea:focus {
 }
 
 .map-card {
+  grid-column: span 6;
   grid-row: span 2;
 }
 
@@ -577,12 +702,18 @@ dd {
 
 .factors-card,
 .timeline-card {
-  grid-column: span 2;
+  grid-column: span 6;
 }
 
 .advisory-card,
 .model-card {
-  grid-column: span 1;
+  grid-column: span 3;
+}
+
+.uncertainty-card-wide,
+.explainability-card,
+.temporal-card {
+  grid-column: span 4;
 }
 
 .why-list {
@@ -604,6 +735,72 @@ dd {
 
 .subtle-button {
   background: #0e7490;
+}
+
+.uncertainty-list {
+  display: grid;
+  gap: 10px;
+}
+
+.uncertainty-list div {
+  padding: 11px;
+  border-left: 4px solid var(--amber);
+  border-radius: 8px;
+  background: var(--amber-bg);
+}
+
+.uncertainty-list span {
+  display: block;
+  margin-top: 3px;
+  color: #7c5512;
+  font-size: 13px;
+}
+
+.science-details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.importance-bars,
+.temporal-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.importance-bars div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.importance-bars i {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.importance-bars b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--green));
+}
+
+.temporal-grid div,
+.advisory-status {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.temporal-grid span,
+.advisory-status small {
+  color: var(--muted);
 }
 
 .factor-row {
@@ -861,7 +1058,11 @@ dd {
   .form-layout,
   .about-grid,
   .info-strip,
-  .feature-grid {
+  .feature-grid,
+  .uncertainty-grid,
+  .workflow-grid,
+  .live-demo,
+  .demo-metrics {
     grid-template-columns: 1fr;
   }
 
@@ -869,7 +1070,12 @@ dd {
   .timeline-card,
   .advisory-card,
   .model-card,
-  .map-card {
+  .map-card,
+  .primary-metric,
+  .why-card,
+  .uncertainty-card-wide,
+  .explainability-card,
+  .temporal-card {
     grid-column: auto;
     grid-row: auto;
   }
