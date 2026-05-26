@@ -25,6 +25,9 @@ const usStates = [
   "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
 ];
 
+const lakeNameTerms = ["lake", "reservoir", "pond", "basin", "water", "lagoon"];
+const blockedNameTerms = ["ni" + "gga", "ni" + "gger"];
+
 const demoLakes = [
   {
     id: 1,
@@ -134,12 +137,34 @@ async function request(path, fallback) {
   }
 }
 
+async function strictRequest(path, fallback) {
+  if (!API_BASE_URL) return clone(fallback);
+  const response = await fetch(apiUrl(path));
+  if (!response.ok) throw new Error(await apiErrorMessage(response));
+  return response.json();
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function sanitizeLakeList(lakes) {
+  return lakes.filter((lake) => isAcceptableLakeName(lake.name));
+}
+
+function isAcceptableLakeName(name) {
+  const lowered = String(name || "").toLowerCase();
+  return !blockedNameTerms.some((term) => lowered.includes(term))
+    && lakeNameTerms.some((term) => lowered.includes(term));
+}
+
+function localLakeById(id) {
+  const lakeId = Number(id);
+  return state.lakes.find((lake) => lake.id === lakeId) || demoLakes.find((lake) => lake.id === lakeId) || null;
+}
+
 const api = {
-  listLakes: () => request("/lakes", demoLakes),
+  listLakes: async () => sanitizeLakeList(await request("/lakes", demoLakes)),
   createLake: async (payload) => {
     if (!API_BASE_URL) {
       throw new Error("Backend lake verification is required before a new dashboard can be created.");
@@ -161,9 +186,19 @@ const api = {
     if (!response.ok) throw new Error(await apiErrorMessage(response));
     return response.json();
   },
-  getLake: (id) => request(`/lakes/${id}`, state.lakes.find((lake) => lake.id === Number(id)) || demoLakes.find((lake) => lake.id === Number(id)) || demoLakes[0]),
-  getLatest: (id) => request(`/lakes/${id}/latest`, demoPredictions[id] || demoPredictions[1]),
-  getHistory: (id) => request(`/lakes/${id}/history`, makeHistory(Number(id))),
+  getLake: (id) => {
+    const fallback = localLakeById(id);
+    if (!fallback) return Promise.reject(new Error("Lake not found"));
+    return strictRequest(`/lakes/${id}`, fallback);
+  },
+  getLatest: (id) => {
+    if (!localLakeById(id) && !API_BASE_URL) return Promise.reject(new Error("Lake not found"));
+    return strictRequest(`/lakes/${id}/latest`, demoPredictions[id] || demoPredictions[1]);
+  },
+  getHistory: (id) => {
+    if (!localLakeById(id) && !API_BASE_URL) return Promise.reject(new Error("Lake not found"));
+    return strictRequest(`/lakes/${id}/history`, makeHistory(Number(id)));
+  },
   explain: (id) => {
     const prediction = Object.values(demoPredictions).find((item) => item.id === Number(id)) || demoPredictions[1];
     const lake = state.lakes.find((item) => item.id === prediction.lake_id) || demoLakes.find((item) => item.id === prediction.lake_id) || demoLakes[0];
@@ -344,7 +379,11 @@ async function render() {
   setActiveNav();
   if (state.route.startsWith("#/lake/")) {
     state.selectedLakeId = Number(state.route.split("/").pop()) || 1;
-    await renderDashboard();
+    try {
+      await renderDashboard();
+    } catch (error) {
+      renderUnverifiedLakeError(error);
+    }
   } else if (state.route === "#/report") {
     renderReport();
   } else if (state.route === "#/about") {
@@ -352,6 +391,23 @@ async function render() {
   } else {
     renderHome();
   }
+}
+
+function renderUnverifiedLakeError(error) {
+  document.querySelector("#page").innerHTML = `
+    <section class="page-header hero-panel">
+      <div>
+        <p class="eyebrow">Verified lake required</p>
+        <h1>No verified lake match found</h1>
+        <p class="lede">Lake Bloom Confidence will not show a bloom likelihood or confidence score when the lake cannot be verified as a real lake record.</p>
+      </div>
+    </section>
+    ${disclaimer()}
+    <div class="notice error">
+      <strong>This dashboard was blocked.</strong>
+      <span>${escapeHtml(error.message || "Try searching with the official lake name and state.")}</span>
+    </div>
+    <p><a class="secondary-button" href="#/">Return to verified lake search</a></p>`;
 }
 
 function shell() {
@@ -620,6 +676,9 @@ async function renderDashboard() {
     api.getLatest(state.selectedLakeId),
     api.getHistory(state.selectedLakeId),
   ]);
+  if (!isAcceptableLakeName(lake.name)) {
+    throw new Error("This lake record could not be verified as a real lake.");
+  }
   const explanation = await api.explain(latest.id);
   const factors = normalizeConfidenceFactors(explanation.confidence_factors);
   const warnings = confidenceWarnings(latest, factors);

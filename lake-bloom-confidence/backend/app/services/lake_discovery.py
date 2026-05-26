@@ -44,6 +44,15 @@ STATE_CENTROIDS = {
 }
 
 
+LAKE_NAME_TERMS = ("lake", "reservoir", "pond", "basin", "water", "lagoon")
+BLOCKED_NAME_TERMS = {
+    # Keep intentionally small and severe: this prevents obviously abusive
+    # strings from becoming public dashboard titles.
+    "ni" + "gga",
+    "ni" + "gger",
+}
+
+
 def normalize_state(state: str) -> str:
     code = state.strip().upper()
     if code not in US_STATE_CODES:
@@ -57,13 +66,21 @@ def find_lakes(db: Session, *, query: str = "", state: str | None = None) -> lis
         lake_query = lake_query.filter(Lake.name.ilike(f"%{query.strip()}%"))
     if state:
         lake_query = lake_query.filter(Lake.state == normalize_state(state))
-    return lake_query.order_by(Lake.name).limit(50).all()
+    return [
+        lake
+        for lake in lake_query.order_by(Lake.name).limit(50).all()
+        if is_valid_lake_record(lake)
+    ]
+
+
+def is_valid_lake_record(lake: Lake) -> bool:
+    return _is_acceptable_lake_text(lake.name)
 
 
 def lookup_lake_candidates(db: Session, *, query: str, state: str) -> list[dict]:
     clean_query = " ".join(query.strip().split())
     clean_state = normalize_state(state)
-    if len(clean_query) < 2:
+    if len(clean_query) < 2 or _contains_blocked_term(clean_query):
         return []
 
     local_candidates = [
@@ -105,23 +122,26 @@ def get_or_create_verified_lake(
     clean_state = normalize_state(state)
     if len(clean_name) < 2:
         raise ValueError("Lake name must contain at least two characters")
+    if _contains_blocked_term(clean_name):
+        raise LookupError(
+            "No verified lake match found. Try the official lake name and state; this app will not create an assessment for an unverified lake."
+        )
 
-    if not source_id:
-        matches = lookup_lake_candidates(db, query=clean_name, state=clean_state)
-        exact = [
-            candidate
-            for candidate in matches
-            if candidate["name"].lower() == clean_name.lower() or clean_name.lower() in candidate["display_name"].lower()
-        ]
-        if not exact:
-            raise LookupError(
-                "No verified lake match found. Try the official lake name and state; this app will not create an assessment for an unverified lake."
-            )
-        match = exact[0]
-        source_id = match["source_id"]
-        lat = match.get("lat")
-        lon = match.get("lon")
-        boundingbox = match.get("boundingbox")
+    matches = lookup_lake_candidates(db, query=clean_name, state=clean_state)
+    exact = [
+        candidate
+        for candidate in matches
+        if _candidate_matches_request(candidate, clean_name, source_id)
+    ]
+    if not exact:
+        raise LookupError(
+            "No verified lake match found. Try the official lake name and state; this app will not create an assessment for an unverified lake."
+        )
+    match = exact[0]
+    source_id = match["source_id"]
+    lat = match.get("lat")
+    lon = match.get("lon")
+    boundingbox = match.get("boundingbox")
 
     existing = (
         db.query(Lake)
@@ -220,6 +240,8 @@ def _verified_geometry(
 
 
 def _nominatim_lake_lookup(query: str, state: str) -> list[dict]:
+    if _contains_blocked_term(query):
+        return []
     params = urlencode(
         {
             "format": "jsonv2",
@@ -269,10 +291,14 @@ def _looks_like_lake_result(item: dict, query: str) -> bool:
     place_type = str(item.get("type", "")).lower()
     display_name = str(item.get("display_name", "")).lower()
     name = str(item.get("name", "")).lower()
-    water_terms = ("lake", "reservoir", "pond", "water", "basin")
-    if place_class in {"natural", "water", "waterway"} and any(term in place_type for term in water_terms):
+    combined = f"{name} {display_name}"
+    if _contains_blocked_term(combined):
+        return False
+    if not _is_acceptable_lake_text(combined):
+        return False
+    if place_class in {"natural", "water", "waterway"} and any(term in place_type for term in LAKE_NAME_TERMS):
         return True
-    if any(term in f"{name} {display_name}" for term in water_terms):
+    if any(term in combined for term in LAKE_NAME_TERMS):
         return query.lower() in display_name or query.lower() in name
     return False
 
@@ -282,3 +308,26 @@ def _float_or_none(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _candidate_matches_request(candidate: dict, clean_name: str, source_id: str | None) -> bool:
+    if source_id and candidate["source_id"] != source_id:
+        return False
+    candidate_text = f"{candidate['name']} {candidate.get('display_name', '')}"
+    if not _is_acceptable_lake_text(candidate_text):
+        return False
+    if source_id:
+        return True
+    return candidate["name"].lower() == clean_name.lower() or clean_name.lower() in candidate.get("display_name", "").lower()
+
+
+def _is_acceptable_lake_text(value: str) -> bool:
+    lowered = value.lower()
+    if _contains_blocked_term(lowered):
+        return False
+    return any(term in lowered for term in LAKE_NAME_TERMS)
+
+
+def _contains_blocked_term(value: str) -> bool:
+    lowered = value.lower()
+    return any(term in lowered for term in BLOCKED_NAME_TERMS)

@@ -16,7 +16,26 @@ def test_lake_list(client):
     assert {"id", "name", "state", "geometry", "area_km2", "shoreline_length_km"} <= set(lakes[0])
 
 
-def test_create_verified_lake_from_lookup_candidate(client):
+def test_create_verified_lake_from_lookup_candidate(client, monkeypatch):
+    from app.services import lake_discovery
+
+    monkeypatch.setattr(
+        lake_discovery,
+        "_nominatim_lake_lookup",
+        lambda query, state: [
+            {
+                "name": "Lake Minnetonka",
+                "state": "MN",
+                "source": "openstreetmap_nominatim",
+                "source_id": "relation:12345",
+                "display_name": "Lake Minnetonka, Hennepin County, Minnesota, United States",
+                "verified": True,
+                "lat": 44.93,
+                "lon": -93.58,
+                "boundingbox": ["44.86", "45.02", "-93.72", "-93.42"],
+            }
+        ],
+    )
     response = client.post(
         "/lakes",
         json={
@@ -42,7 +61,23 @@ def test_create_verified_lake_from_lookup_candidate(client):
     assert 0 <= payload["confidence_score"] <= 1
 
 
-def test_lake_search_filters_verified_lakes(client):
+def test_lake_search_filters_verified_lakes(client, monkeypatch):
+    from app.services import lake_discovery
+
+    monkeypatch.setattr(
+        lake_discovery,
+        "_nominatim_lake_lookup",
+        lambda query, state: [
+            {
+                "name": "Lake Champlain",
+                "state": "NY",
+                "source": "openstreetmap_nominatim",
+                "source_id": "relation:98765",
+                "display_name": "Lake Champlain, New York, United States",
+                "verified": True,
+            }
+        ],
+    )
     client.post(
         "/lakes",
         json={
@@ -65,6 +100,43 @@ def test_unverified_lake_name_is_rejected(client, monkeypatch):
     response = client.post("/lakes", json={"name": "Definitely Not A Real Lake 123", "state": "MN"})
     assert response.status_code == 404
     assert "No verified lake match found" in response.json()["detail"]
+
+
+def test_forged_or_abusive_lake_name_is_rejected(client):
+    blocked_name = "ni" + "gga"
+    response = client.post(
+        "/lakes",
+        json={
+            "name": blocked_name,
+            "state": "NJ",
+            "source": "openstreetmap_nominatim",
+            "source_id": "relation:forged",
+            "display_name": f"{blocked_name}, NJ",
+        },
+    )
+    assert response.status_code == 404
+    assert "No verified lake match found" in response.json()["detail"]
+
+
+def test_invalid_legacy_lake_records_are_hidden(client):
+    from app.db import SessionLocal
+    from app.models.lake import Lake
+
+    with SessionLocal() as db:
+        lake = Lake(
+            name="Fake Record",
+            state="NJ",
+            geometry="POLYGON((-75 40,-74 40,-74 41,-75 41,-75 40))",
+            area_km2=42.5,
+            shoreline_length_km=18.4,
+        )
+        db.add(lake)
+        db.commit()
+        db.refresh(lake)
+        lake_id = lake.id
+
+    assert all(lake["name"] != "Fake Record" for lake in client.get("/lakes").json())
+    assert client.get(f"/lakes/{lake_id}").status_code == 404
 
 
 def test_lake_lookup_returns_verified_candidates(client):
