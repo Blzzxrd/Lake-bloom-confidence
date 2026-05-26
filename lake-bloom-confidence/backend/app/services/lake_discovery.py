@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from sqlalchemy.orm import Session
 
@@ -57,9 +60,69 @@ def find_lakes(db: Session, *, query: str = "", state: str | None = None) -> lis
     return lake_query.order_by(Lake.name).limit(50).all()
 
 
-def get_or_create_modeled_lake(db: Session, *, name: str, state: str) -> Lake:
+def lookup_lake_candidates(db: Session, *, query: str, state: str) -> list[dict]:
+    clean_query = " ".join(query.strip().split())
+    clean_state = normalize_state(state)
+    if len(clean_query) < 2:
+        return []
+
+    local_candidates = [
+        {
+            "name": lake.name,
+            "state": lake.state,
+            "display_name": f"{lake.name}, {lake.state}",
+            "source": "local_database",
+            "source_id": f"lake:{lake.id}",
+            "verified": True,
+        }
+        for lake in find_lakes(db, query=clean_query, state=clean_state)[:8]
+    ]
+    remote_candidates = _nominatim_lake_lookup(clean_query, clean_state)
+
+    seen: set[tuple[str, str]] = set()
+    candidates: list[dict] = []
+    for candidate in [*local_candidates, *remote_candidates]:
+        key = (candidate["source"], candidate["source_id"])
+        if key not in seen:
+            seen.add(key)
+            candidates.append(candidate)
+    return candidates[:8]
+
+
+def get_or_create_verified_lake(
+    db: Session,
+    *,
+    name: str,
+    state: str,
+    source: str | None = None,
+    source_id: str | None = None,
+    display_name: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    boundingbox: list[str] | None = None,
+) -> Lake:
     clean_name = " ".join(name.strip().split())
     clean_state = normalize_state(state)
+    if len(clean_name) < 2:
+        raise ValueError("Lake name must contain at least two characters")
+
+    if not source_id:
+        matches = lookup_lake_candidates(db, query=clean_name, state=clean_state)
+        exact = [
+            candidate
+            for candidate in matches
+            if candidate["name"].lower() == clean_name.lower() or clean_name.lower() in candidate["display_name"].lower()
+        ]
+        if not exact:
+            raise LookupError(
+                "No verified lake match found. Try the official lake name and state; this app will not create an assessment for an unverified lake."
+            )
+        match = exact[0]
+        source_id = match["source_id"]
+        lat = match.get("lat")
+        lon = match.get("lon")
+        boundingbox = match.get("boundingbox")
+
     existing = (
         db.query(Lake)
         .filter(Lake.name.ilike(clean_name), Lake.state == clean_state)
@@ -72,7 +135,7 @@ def get_or_create_modeled_lake(db: Session, *, name: str, state: str) -> Lake:
     lake = Lake(
         name=clean_name,
         state=clean_state,
-        geometry=_modeled_geometry(clean_name, clean_state),
+        geometry=_verified_geometry(clean_name, clean_state, lat=lat, lon=lon, boundingbox=boundingbox),
         area_km2=_modeled_area(clean_name, clean_state),
         shoreline_length_km=_modeled_shoreline(clean_name, clean_state),
     )
@@ -120,3 +183,102 @@ def _modeled_geometry(name: str, state: str) -> str:
         f"{cx - width:.5f} {cy + height:.5f},"
         f"{cx - width:.5f} {cy - height:.5f}))"
     )
+
+
+def _verified_geometry(
+    name: str,
+    state: str,
+    *,
+    lat: float | None,
+    lon: float | None,
+    boundingbox: list[str] | None,
+) -> str:
+    if boundingbox and len(boundingbox) == 4:
+        try:
+            south, north, west, east = [float(value) for value in boundingbox]
+            if south < north and west < east:
+                return (
+                    f"POLYGON(({west:.5f} {south:.5f},"
+                    f"{east:.5f} {south:.5f},"
+                    f"{east:.5f} {north:.5f},"
+                    f"{west:.5f} {north:.5f},"
+                    f"{west:.5f} {south:.5f}))"
+                )
+        except (TypeError, ValueError):
+            pass
+    if lat is not None and lon is not None:
+        width = 0.045
+        height = 0.035
+        return (
+            f"POLYGON(({lon - width:.5f} {lat - height:.5f},"
+            f"{lon + width:.5f} {lat - height:.5f},"
+            f"{lon + width:.5f} {lat + height:.5f},"
+            f"{lon - width:.5f} {lat + height:.5f},"
+            f"{lon - width:.5f} {lat - height:.5f}))"
+        )
+    return _modeled_geometry(name, state)
+
+
+def _nominatim_lake_lookup(query: str, state: str) -> list[dict]:
+    params = urlencode(
+        {
+            "format": "jsonv2",
+            "limit": 8,
+            "countrycodes": "us",
+            "addressdetails": 1,
+            "extratags": 1,
+            "q": f"{query}, {state}, USA",
+        }
+    )
+    request = Request(
+        f"https://nominatim.openstreetmap.org/search?{params}",
+        headers={"User-Agent": "LakeBloomConfidence/0.1 screening-support"},
+    )
+    try:
+        with urlopen(request, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return []
+
+    candidates: list[dict] = []
+    for item in payload:
+        if not _looks_like_lake_result(item, query):
+            continue
+        name = item.get("name") or item.get("display_name", "").split(",")[0].strip()
+        source_id = f"{item.get('osm_type', 'osm')}:{item.get('osm_id') or item.get('place_id')}"
+        if not name or not source_id:
+            continue
+        candidates.append(
+            {
+                "name": name,
+                "state": state,
+                "display_name": item.get("display_name") or f"{name}, {state}",
+                "source": "openstreetmap_nominatim",
+                "source_id": source_id,
+                "verified": True,
+                "lat": _float_or_none(item.get("lat")),
+                "lon": _float_or_none(item.get("lon")),
+                "boundingbox": item.get("boundingbox"),
+            }
+        )
+    return candidates
+
+
+def _looks_like_lake_result(item: dict, query: str) -> bool:
+    place_class = str(item.get("class", "")).lower()
+    place_type = str(item.get("type", "")).lower()
+    display_name = str(item.get("display_name", "")).lower()
+    name = str(item.get("name", "")).lower()
+    water_terms = ("lake", "reservoir", "pond", "water", "basin")
+    if place_class in {"natural", "water", "waterway"} and any(term in place_type for term in water_terms):
+        return True
+    if any(term in f"{name} {display_name}" for term in water_terms):
+        return query.lower() in display_name or query.lower() in name
+    return False
+
+
+def _float_or_none(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

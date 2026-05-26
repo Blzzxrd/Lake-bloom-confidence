@@ -4,9 +4,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.lake import Lake
 from app.models.prediction import Prediction
-from app.schemas.lake import LakeCreate, LakeRead
+from app.schemas.lake import LakeCreate, LakeLookupCandidate, LakeRead
 from app.schemas.prediction import PredictionRead
-from app.services.lake_discovery import find_lakes, get_or_create_modeled_lake
+from app.services.lake_discovery import find_lakes, get_or_create_verified_lake, lookup_lake_candidates
 
 router = APIRouter(prefix="/lakes", tags=["lakes"])
 
@@ -28,12 +28,36 @@ def search_lakes(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("", response_model=LakeRead, status_code=status.HTTP_201_CREATED)
-def create_modeled_lake(payload: LakeCreate, db: Session = Depends(get_db)) -> Lake:
+@router.get("/lookup", response_model=list[LakeLookupCandidate])
+def lookup_lakes(
+    q: str = Query(..., min_length=2, max_length=160),
+    state: str = Query(..., min_length=2, max_length=2),
+    db: Session = Depends(get_db),
+) -> list[dict]:
     try:
-        return get_or_create_modeled_lake(db, name=payload.name, state=payload.state)
+        return lookup_lake_candidates(db, query=q, state=state)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("", response_model=LakeRead, status_code=status.HTTP_201_CREATED)
+def create_verified_lake(payload: LakeCreate, db: Session = Depends(get_db)) -> Lake:
+    try:
+        return get_or_create_verified_lake(
+            db,
+            name=payload.name,
+            state=payload.state,
+            source=payload.source,
+            source_id=payload.source_id,
+            display_name=payload.display_name,
+            lat=payload.lat,
+            lon=payload.lon,
+            boundingbox=payload.boundingbox,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/{lake_id}", response_model=LakeRead)

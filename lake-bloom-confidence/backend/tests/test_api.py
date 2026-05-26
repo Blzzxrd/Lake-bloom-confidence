@@ -16,8 +16,20 @@ def test_lake_list(client):
     assert {"id", "name", "state", "geometry", "area_km2", "shoreline_length_km"} <= set(lakes[0])
 
 
-def test_create_modeled_lake_for_any_us_lake(client):
-    response = client.post("/lakes", json={"name": "Lake Minnetonka", "state": "MN"})
+def test_create_verified_lake_from_lookup_candidate(client):
+    response = client.post(
+        "/lakes",
+        json={
+            "name": "Lake Minnetonka",
+            "state": "MN",
+            "source": "openstreetmap_nominatim",
+            "source_id": "relation:12345",
+            "display_name": "Lake Minnetonka, Hennepin County, Minnesota, United States",
+            "lat": 44.93,
+            "lon": -93.58,
+            "boundingbox": ["44.86", "45.02", "-93.72", "-93.42"],
+        },
+    )
     assert response.status_code == 201
     lake = response.json()
     assert lake["name"] == "Lake Minnetonka"
@@ -30,11 +42,37 @@ def test_create_modeled_lake_for_any_us_lake(client):
     assert 0 <= payload["confidence_score"] <= 1
 
 
-def test_lake_search_filters_modeled_lakes(client):
-    client.post("/lakes", json={"name": "Lake Champlain", "state": "NY"})
+def test_lake_search_filters_verified_lakes(client):
+    client.post(
+        "/lakes",
+        json={
+            "name": "Lake Champlain",
+            "state": "NY",
+            "source": "openstreetmap_nominatim",
+            "source_id": "relation:98765",
+            "display_name": "Lake Champlain, New York, United States",
+        },
+    )
     response = client.get("/lakes/search?q=Champlain&state=NY")
     assert response.status_code == 200
     assert any(lake["name"] == "Lake Champlain" for lake in response.json())
+
+
+def test_unverified_lake_name_is_rejected(client, monkeypatch):
+    from app.services import lake_discovery
+
+    monkeypatch.setattr(lake_discovery, "lookup_lake_candidates", lambda *args, **kwargs: [])
+    response = client.post("/lakes", json={"name": "Definitely Not A Real Lake 123", "state": "MN"})
+    assert response.status_code == 404
+    assert "No verified lake match found" in response.json()["detail"]
+
+
+def test_lake_lookup_returns_verified_candidates(client):
+    response = client.get("/lakes/lookup?q=Erie&state=OH")
+    assert response.status_code == 200
+    candidates = response.json()
+    assert any(candidate["name"] == "Lake Erie Western Basin" for candidate in candidates)
+    assert all(candidate["verified"] is True for candidate in candidates)
 
 
 def test_ohio_advisory_uses_current_state_resource():

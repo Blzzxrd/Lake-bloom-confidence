@@ -142,7 +142,7 @@ const api = {
   listLakes: () => request("/lakes", demoLakes),
   createLake: async (payload) => {
     if (!API_BASE_URL) {
-      return createLocalModeledLake(payload);
+      throw new Error("Backend lake verification is required before a new dashboard can be created.");
     }
     const response = await fetch(apiUrl("/lakes"), {
       method: "POST",
@@ -150,9 +150,15 @@ const api = {
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      console.warn("Backend lake creation unavailable; using local modeled dashboard.", await response.text());
-      return createLocalModeledLake(payload);
+      throw new Error(await apiErrorMessage(response));
     }
+    return response.json();
+  },
+  lookupLakes: async (query, selectedState) => {
+    if (!API_BASE_URL) return [];
+    const params = new URLSearchParams({ q: query, state: selectedState });
+    const response = await fetch(apiUrl(`/lakes/lookup?${params.toString()}`));
+    if (!response.ok) throw new Error(await apiErrorMessage(response));
     return response.json();
   },
   getLake: (id) => request(`/lakes/${id}`, state.lakes.find((lake) => lake.id === Number(id)) || demoLakes.find((lake) => lake.id === Number(id)) || demoLakes[0]),
@@ -192,23 +198,20 @@ const api = {
   },
 };
 
-function createLocalModeledLake(payload) {
-  const id = Math.max(...state.lakes.map((lake) => lake.id), ...demoLakes.map((lake) => lake.id), 5) + 1;
-  const lake = {
-    id,
-    name: payload.name,
-    state: payload.state,
-    geometry: "POLYGON((-98.7 39.7,-98.5 39.7,-98.5 39.9,-98.7 39.9,-98.7 39.7))",
-    area_km2: 42.5,
-    shoreline_length_km: 18.4,
-  };
-  demoPredictions[id] = makePrediction(id, id, 0.46, 0.52, labels[2], 0.76, 0.72, 0.79, 0.82, 0.78);
-  return lake;
-}
-
 function factorsOnly(prediction) {
   const { features, ...factors } = prediction.confidence_factors_json;
   return factors;
+}
+
+async function apiErrorMessage(response) {
+  const text = await response.text();
+  try {
+    const payload = JSON.parse(text);
+    if (payload.detail) return typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
+  } catch (error) {
+    return text || `HTTP ${response.status}`;
+  }
+  return text || `HTTP ${response.status}`;
 }
 
 function apiUrl(path) {
@@ -250,8 +253,17 @@ const state = {
   lakes: [],
   selectedLakeId: 1,
   selectedSearchState: "MN",
+  lookup: {
+    query: "",
+    candidates: [],
+    loading: false,
+    searched: false,
+    error: "",
+  },
   route: location.hash || "#/",
 };
+
+let lookupTimer = null;
 
 window.addEventListener("hashchange", () => {
   state.route = location.hash || "#/";
@@ -296,21 +308,21 @@ document.addEventListener("submit", async (event) => {
 
 document.addEventListener("input", (event) => {
   if (event.target.matches("#lake-search")) {
-    renderLakeResults(event.target.value);
+    scheduleLakeLookup(event.target.value);
   }
 });
 
 document.addEventListener("change", (event) => {
   if (event.target.matches("#lake-state")) {
     state.selectedSearchState = event.target.value;
-    renderLakeResults(document.querySelector("#lake-search")?.value || "");
+    scheduleLakeLookup(document.querySelector("#lake-search")?.value || "");
   }
 });
 
 document.addEventListener("click", (event) => {
-  const createTarget = event.target.closest("[data-create-lake]");
-  if (createTarget) {
-    createModeledLake();
+  const candidateTarget = event.target.closest("[data-lookup-index]");
+  if (candidateTarget) {
+    createVerifiedLake(Number(candidateTarget.dataset.lookupIndex), candidateTarget);
     return;
   }
 
@@ -403,7 +415,7 @@ function renderHome() {
     <section class="search-panel">
       <div class="search-controls">
         <label for="lake-search">Lake name</label>
-        <input id="lake-search" type="search" placeholder="Search or enter any U.S. lake" autocomplete="off" />
+        <input id="lake-search" type="search" placeholder="Search verified U.S. lakes" autocomplete="off" />
         <label for="lake-state">State</label>
         <select id="lake-state">
           ${usStates.map((code) => `<option value="${code}" ${code === state.selectedSearchState ? "selected" : ""}>${code}</option>`).join("")}
@@ -494,7 +506,7 @@ function renderLakeResults(query) {
       <button class="lake-row" data-lake-id="${lake.id}">
         <span>
           <strong>${escapeHtml(lake.name)}</strong>
-          <small>${escapeHtml(lake.state)} · ${escapeHtml(String(lake.area_km2))} km²</small>
+          <small>${escapeHtml(lake.state)} / ${escapeHtml(String(lake.area_km2))} km2</small>
         </span>
         <span class="row-metrics">
           ${badge(prediction.label)}
@@ -502,29 +514,92 @@ function renderLakeResults(query) {
         </span>
       </button>`;
   }).join("");
-  const createPanel = needle.length >= 2 ? `
-    <div class="create-lake-panel">
-      <div>
-        <strong>Create a screening dashboard for “${escapeHtml(query.trim())}” in ${escapeHtml(state.selectedSearchState)}</strong>
-        <span>Uses modeled lake geometry and mock satellite ingestion until authoritative lake boundary data is connected.</span>
-      </div>
-      <button class="secondary-button" data-create-lake type="button">Create dashboard</button>
-    </div>` : "";
-  document.querySelector("#lake-results").innerHTML = rows || createPanel || `<div class="empty">Start typing a lake name to search or create a dashboard.</div>`;
+  const lookupMatches = state.lookup.query === needle
+    ? state.lookup.candidates
+      .map((candidate, index) => ({ candidate, index }))
+      .filter(({ candidate }) => !state.lakes.some((lake) => lake.name.toLowerCase() === candidate.name.toLowerCase() && lake.state === candidate.state))
+    : [];
+  const suggestions = lookupMatches.map(({ candidate, index }) => `
+    <button class="lake-row candidate-row" data-lookup-index="${index}" type="button">
+      <span>
+        <strong>${escapeHtml(candidate.name)}</strong>
+        <small>${escapeHtml(candidate.display_name || `${candidate.name}, ${candidate.state}`)}</small>
+      </span>
+      <span class="row-metrics">
+        <span class="metric-mini verified">Verified match</span>
+        <span class="metric-mini">${escapeHtml(candidate.state)}</span>
+      </span>
+    </button>`).join("");
+  const status = lakeLookupStatus(needle, rows, suggestions);
+  document.querySelector("#lake-results").innerHTML = [rows, suggestions, status].filter(Boolean).join("");
 }
 
-async function createModeledLake() {
-  const input = document.querySelector("#lake-search");
-  const name = input.value.trim();
-  if (name.length < 2) {
-    input.focus();
+function lakeLookupStatus(needle, rows, suggestions) {
+  if (needle.length < 2) {
+    return `<div class="empty">Start typing a lake name. New dashboards require a verified lake match.</div>`;
+  }
+  if (state.lookup.loading) {
+    return `<div class="lookup-status">Checking verified lake sources...</div>`;
+  }
+  if (state.lookup.error) {
+    return `<div class="notice error"><strong>Lake lookup is unavailable.</strong><span>${escapeHtml(state.lookup.error)}</span></div>`;
+  }
+  if (!API_BASE_URL && !rows) {
+    return `<div class="empty">Demo mode can only open seeded lakes. Connect the backend to verify additional U.S. lakes.</div>`;
+  }
+  if (!rows && !suggestions && state.lookup.searched) {
+    return `
+      <div class="notice error">
+        <strong>No verified lake match found.</strong>
+        <span>Try the official lake name and state. Lake Bloom Confidence will not create an assessment for an unverified or non-real lake.</span>
+      </div>`;
+  }
+  return "";
+}
+
+function scheduleLakeLookup(query) {
+  const cleanQuery = query.trim();
+  state.lookup.query = cleanQuery.toLowerCase();
+  state.lookup.error = "";
+  state.lookup.candidates = [];
+  state.lookup.searched = false;
+  if (lookupTimer) clearTimeout(lookupTimer);
+  if (cleanQuery.length < 2) {
+    state.lookup.loading = false;
+    renderLakeResults(query);
     return;
   }
-  const button = document.querySelector("[data-create-lake]");
+  state.lookup.loading = Boolean(API_BASE_URL);
+  state.lookup.searched = !API_BASE_URL;
+  renderLakeResults(query);
+  if (!API_BASE_URL) return;
+  lookupTimer = setTimeout(async () => {
+    const activeQuery = cleanQuery;
+    try {
+      const candidates = await api.lookupLakes(activeQuery, state.selectedSearchState);
+      if (state.lookup.query !== activeQuery.toLowerCase()) return;
+      state.lookup.candidates = candidates;
+      state.lookup.searched = true;
+    } catch (error) {
+      if (state.lookup.query !== activeQuery.toLowerCase()) return;
+      state.lookup.error = error.message;
+      state.lookup.searched = true;
+    } finally {
+      if (state.lookup.query === activeQuery.toLowerCase()) {
+        state.lookup.loading = false;
+        renderLakeResults(document.querySelector("#lake-search")?.value || "");
+      }
+    }
+  }, 280);
+}
+
+async function createVerifiedLake(candidateIndex, button) {
+  const candidate = state.lookup.candidates[candidateIndex];
+  if (!candidate) return;
   button.disabled = true;
-  button.textContent = "Creating...";
+  button.classList.add("loading");
   try {
-    const lake = await api.createLake({ name, state: state.selectedSearchState });
+    const lake = await api.createLake(candidate);
     if (!state.lakes.some((item) => item.id === lake.id)) {
       state.lakes.push(lake);
       state.lakes.sort((a, b) => a.name.localeCompare(b.name));
@@ -534,12 +609,11 @@ async function createModeledLake() {
   } catch (error) {
     document.querySelector("#lake-results").innerHTML = `
       <div class="notice error">
-        <strong>Could not create that lake dashboard.</strong>
+        <strong>Could not create that verified lake dashboard.</strong>
         <span>${escapeHtml(error.message)}</span>
       </div>`;
   }
 }
-
 async function renderDashboard() {
   const [lake, latest, history] = await Promise.all([
     api.getLake(state.selectedLakeId),
